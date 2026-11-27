@@ -10,7 +10,7 @@ mod ui;
 pub use ui::{brand, theme};
 
 use checkpoint::Checkpoint;
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{builder::Styles, ColorChoice, Parser, Subcommand, ValueEnum};
 use futures_util::FutureExt;
 use riftlock_core::ScopedClient as Client;
 use riftlock_core::{Depth, Evidence, Finding, ScanError, ScopeGuard};
@@ -88,6 +88,93 @@ enum Format {
     Pdf,
 }
 
+const CLI_LONG_HELP: &str = r#"DETAILED OPTION REFERENCE
+
+GLOBAL
+  -h, --help                 Show help. Add a command to see its options.
+  -V, --version              Print the installed version.
+
+SCAN  riftlock scan [OPTIONS] [URL]
+  URL                        Target URL; may be omitted when configured in
+                             riftlock.toml.
+  --provider <NAME>          Scanner selection. `auto` (default) runs all
+                             scanners matching the target. Choices: supabase,
+                             firebase, appwrite, nextjs, clerk, cache, path,
+                             graphql, ssrf, race, signedurl, prototype,
+                             smuggling, websocket, oauth, sse, clientside,
+                             supplychain, llm, grpc, generic, spa, openapi,
+                             auth, misconfig, infra.
+  --depth <normal|read>      `normal`: passive discovery; GETs may occur
+                             (5 requests/second). `read` (default): safe active
+                             checks; state-changing methods are blocked
+                             (20 requests/second).
+  --godmode                  Enable high-impact/destructive probes, all
+                             providers, larger wordlists, and 50 requests/sec.
+                             Requires authorized scope-file settings or an
+                             interactive TTY confirmation; otherwise refused.
+  --scope <ORIGINS>          Comma-separated allowed hosts/origins. A non-empty
+                             list replaces the default target origin; include
+                             the target if it should remain in scope.
+  --scope-file <PATH>        YAML authorization file. Destructive probes need
+                             a matching target host, `max_depth: write`, and
+                             `allow_destructive: true`.
+  --bearer <TOKEN>           Send as the Authorization Bearer credential on
+                             scoped requests. Treat as sensitive.
+  --cookie <VALUE>           Send as the Cookie header on scoped requests.
+                             Treat as sensitive.
+  --format <FORMAT>          Primary report: human (default), json (one array),
+                             ndjson (one object per line), sarif, html,
+                             markdown (`md` alias), or pdf.
+  --output <PATH>            Save the primary report to this path. Human output
+                             writes SARIF; PDF requires this option. Completed
+                             scans also save HTML unless HTML is primary.
+  --show-secrets             Show full credential values in interactive human
+                             terminal output only; ignored for files and logs.
+  --quiet                    Hide scanner progress and the final human summary;
+                             scanning and report generation continue.
+  --config <PATH>            Load TOML scan defaults. Defaults to
+                             ./riftlock.toml when present; CLI values override.
+  --wordlist <PATH>          Parameter names for endpoint fuzzing, one per line;
+                             `#` starts a comment. Defaults to the built-in
+                             list (godmode has a larger built-in list).
+  --discovery-budget <SEC>   Discovery/crawl time limit (default: 300 seconds).
+                             Does not change request timeouts, scope, rate
+                             limits, or scanner-engine budgets.
+  --resume <SCAN_ID>         Continue an interrupted scan from its checkpoint.
+                             Target and scan settings are restored; format and
+                             output options still apply. Completed engines are
+                             not rerun. Checkpoints may contain sensitive data.
+
+AUDIT  riftlock audit [OPTIONS] URL
+  URL                        Required target URL; runs all applicable scanners
+                             and writes ./riftlock-report.sarif.
+  --scope-file <PATH>        YAML authorization file. Write-depth probes are
+                             enabled only for a matching target with
+                             `max_depth: write` and `allow_destructive: true`.
+  --godmode                  Request high-impact/destructive probes. Requires
+                             authorization in the scope file or interactive
+                             TTY confirmation; otherwise refused.
+
+FINGERPRINT  riftlock fingerprint URL
+  URL                        Required page URL. Passively checks the page and
+                             its bundles for exposed Supabase key material.
+
+CONFIGURATION
+  Optional riftlock.toml keys: target, depth (0 = normal; nonzero = read),
+  format, wordlist, discovery_budget. Resumed scans use checkpoint settings.
+
+SAFETY AND SCOPE
+  Without --scope, only the target origin is allowed. A non-empty --scope
+  replaces that default. Requests and redirects remain host-scoped. Explicitly
+  naming a private/LAN host does not itself authorize testing it.
+
+REPORTS AND EXIT STATUS
+  Completed scans save timestamped HTML unless HTML is the primary format.
+  Exit codes: 0 clean; 1 findings; 2 error or incomplete coverage;
+  3 scope/authorization refusal. Treat incomplete coverage as non-clean.
+
+Only scan systems you own or are explicitly authorized to test."#;
+
 /// Riftlock: BaaS misconfiguration prover.
 #[derive(Debug, Parser)]
 #[command(
@@ -96,11 +183,113 @@ enum Format {
     about = "Evidence-first security assessment for web applications and BaaS.",
     long_about = "RIFTLOCK checks web applications and backend-as-a-service deployments using evidence-based scanners. Start with `scan --depth normal` for passive reconnaissance or use the default `read` depth for safe active checks. Requests are restricted to the explicitly scoped target host(s).",
     after_help = "EXIT STATUS:\n  0  Scan completed cleanly (no findings)\n  1  One or more findings\n  2  Scan error or incomplete coverage\n  3  Scope/authorization refusal\n\nQUICK START:\n  riftlock scan https://your-authorized-target.example\n  riftlock scan https://your-authorized-target.example --provider supabase --format sarif --output report.sarif\n  riftlock fingerprint https://your-authorized-target.example\n\nUse `riftlock <COMMAND> --help` for command options. Only scan systems you own or are explicitly authorized to test.",
-    after_long_help = "SCAN DEPTHS:\n  normal  Passive discovery and fingerprinting; no active payloads, but passive-observation GETs may occur (5 requests/second)\n  read    Safe active checks (default; 20 requests/second)\n  --godmode  Authorization-gated maximum checks, including destructive probes (50 requests/second)\n\nREPORTS:\n  Completed scans save a self-contained HTML report. Unless --format html selects it as primary, the HTML report gets a timestamped file in the current directory; HTML output uses --output or a generated timestamped filename.\n  --format selects the primary report format; --output writes it to a path. Human output with --output saves SARIF. PDF requires --output.\n  With human output, --output alone writes SARIF. Audit always writes ./riftlock-report.sarif.\n\nSCOPE AND CREDENTIALS:\n  Without --scope, only the target origin is in scope. A non-empty --scope replaces that default list (comma-separated exact hosts); include the target if needed.\n  --scope-file is a scope.yaml with target, max_depth, allow_destructive, authorized_by and authorized_at; destructive probes require a matching target host, max_depth: write and allow_destructive: true. Host matching ignores scheme and port. --godmode requires this file or interactive confirmation.\n  --bearer and --cookie send credentials to scoped requests; treat outputs and checkpoints as sensitive.\n\nCONFIGURATION:\n  Optional ./riftlock.toml keys: target, depth (0=normal, nonzero=read), format, wordlist, discovery_budget.\n  Explicit CLI options override config defaults. See scan --help for every option."
+    after_long_help = CLI_LONG_HELP
 )]
 struct Cli {
     #[command(subcommand)]
     command: Command,
+}
+
+/// Render Clap help with a small brand mark and red option-prefix dashes.
+/// Only the leading dashes on option declaration lines receive color.
+fn print_cli_help_if_requested() -> bool {
+    use std::io::{self, IsTerminal, Write};
+
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let help_index = args.iter().position(|arg| arg == "-h" || arg == "--help");
+    let help_command = args.first().is_some_and(|arg| arg == "help");
+    if help_index.is_none() && !help_command {
+        return false;
+    }
+
+    let mut command = <Cli as clap::CommandFactory>::command()
+        .color(ColorChoice::Never)
+        .styles(Styles::plain());
+    let path_start = usize::from(help_command);
+    let path_end = help_index.unwrap_or(args.len());
+    let mut bin_name = String::from("riftlock");
+    for segment in args[path_start..path_end]
+        .iter()
+        .filter(|part| !part.starts_with('-'))
+    {
+        let Some(subcommand) = command.find_subcommand_mut(segment) else {
+            break;
+        };
+        command = std::mem::replace(subcommand, clap::Command::new("__help_placeholder"));
+        bin_name.push(' ');
+        bin_name.push_str(segment);
+    }
+    command = command.bin_name(bin_name);
+
+    let mut rendered = Vec::new();
+    let wrote = if args
+        .get(help_index.unwrap_or(usize::MAX))
+        .is_some_and(|arg| arg == "--help")
+    {
+        command.write_long_help(&mut rendered)
+    } else {
+        command.write_help(&mut rendered)
+    };
+    if wrote.is_err() {
+        return false;
+    }
+
+    let help = String::from_utf8_lossy(&rendered).into_owned();
+    let color = io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none();
+    let mut formatted = String::with_capacity(help.len() + 128);
+    for line in help.split_inclusive('\n') {
+        if !color {
+            formatted.push_str(line);
+            continue;
+        }
+        let indent = line.len() - line.trim_start().len();
+        let body = &line[indent..];
+        let field_end = body
+            .as_bytes()
+            .windows(2)
+            .position(|spaces| spaces == b"  ")
+            .unwrap_or(body.trim_end_matches('\n').len());
+        let (fields, description) = body.split_at(field_end);
+        formatted.push_str(&line[..indent]);
+        let mut previous = None;
+        let mut in_red = false;
+        for (index, character) in fields.char_indices() {
+            let flag_start =
+                character == '-' && (index == 0 || matches!(previous, Some(' ' | ',')));
+            if flag_start {
+                let next = fields[index + 1..].chars().next();
+                if next.is_some_and(|next| next == '-' || next.is_ascii_alphanumeric()) {
+                    formatted.push_str("\x1b[1;38;5;196m");
+                    in_red = true;
+                }
+            }
+            if in_red && character != '-' {
+                formatted.push_str("\x1b[0m");
+                in_red = false;
+            }
+            formatted.push(character);
+            if in_red
+                && fields[index + character.len_utf8()..]
+                    .chars()
+                    .next()
+                    .is_none_or(|next| next != '-')
+            {
+                formatted.push_str("\x1b[0m");
+                in_red = false;
+            }
+            previous = Some(character);
+        }
+        if in_red {
+            formatted.push_str("\x1b[0m");
+        }
+        formatted.push_str(description);
+    }
+    let logo = brand::help_wordmark();
+    let mut stdout = io::stdout().lock();
+    let _ = stdout.write_all(logo.as_bytes());
+    let _ = stdout.write_all(formatted.as_bytes());
+    let _ = stdout.flush();
+    true
 }
 
 // Clap constructs this enum once per process; boxing the Scan arguments would
@@ -347,6 +536,9 @@ fn client(
 
 #[tokio::main]
 async fn main() -> std::process::ExitCode {
+    if print_cli_help_if_requested() {
+        return std::process::ExitCode::SUCCESS;
+    }
     if std::env::args_os()
         .nth(1)
         .is_some_and(|arg| arg == "--version" || arg == "-V")

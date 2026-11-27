@@ -38,6 +38,19 @@ fn push_boxed_line(
     out.push('\n');
 }
 
+/// Boxed red wordmark printed above CLI help. Honors `NO_COLOR` and only
+/// emits color when stdout is a terminal.
+pub fn help_wordmark() -> String {
+    let enabled = io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none();
+    let red = |text: &str| paint(text, "1;38;5;196", enabled);
+    format!(
+        "{}\n{}\n{}\n\n",
+        red("╭──────────╮"),
+        red("│ RIFTLOCK │"),
+        red("╰──────────╯"),
+    )
+}
+
 /// Print the boxed Riftlock logo. Color is enabled only for a terminal without
 /// `NO_COLOR`; redirected output remains plain text.
 pub fn print_logo() {
