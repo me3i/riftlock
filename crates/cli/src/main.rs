@@ -53,7 +53,7 @@ type EngineReport = (
 /// Values accepted by `--depth`; Godmode is available only via `--godmode`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum DepthArg {
-    /// Passive reconnaissance without active payloads.
+    /// Passive reconnaissance without active payloads; passive observations may send GET requests.
     Normal,
     /// Safe active checks without high-impact payload classes.
     Read,
@@ -93,7 +93,10 @@ enum Format {
 #[command(
     name = "riftlock",
     version,
-    about = "Prove BaaS misconfigurations with differential testing, not heuristics."
+    about = "Evidence-first security assessment for web applications and BaaS.",
+    long_about = "RIFTLOCK checks web applications and backend-as-a-service deployments using evidence-based scanners. Start with `scan --depth normal` for passive reconnaissance or use the default `read` depth for safe active checks. Requests are restricted to the explicitly scoped target host(s).",
+    after_help = "EXIT STATUS:\n  0  Scan completed cleanly (no findings)\n  1  One or more findings\n  2  Scan error or incomplete coverage\n  3  Scope/authorization refusal\n\nQUICK START:\n  riftlock scan https://your-authorized-target.example\n  riftlock scan https://your-authorized-target.example --provider supabase --format sarif --output report.sarif\n  riftlock fingerprint https://your-authorized-target.example\n\nUse `riftlock <COMMAND> --help` for command options. Only scan systems you own or are explicitly authorized to test.",
+    after_long_help = "SCAN DEPTHS:\n  normal  Passive discovery and fingerprinting; no active payloads, but passive-observation GETs may occur (5 requests/second)\n  read    Safe active checks (default; 20 requests/second)\n  --godmode  Authorization-gated maximum checks, including destructive probes (50 requests/second)\n\nREPORTS:\n  Completed scans save a self-contained HTML report. Unless --format html selects it as primary, the HTML report gets a timestamped file in the current directory; HTML output uses --output or a generated timestamped filename.\n  --format selects the primary report format; --output writes it to a path. Human output with --output saves SARIF. PDF requires --output.\n  With human output, --output alone writes SARIF. Audit always writes ./riftlock-report.sarif.\n\nSCOPE AND CREDENTIALS:\n  Without --scope, only the target origin is in scope. A non-empty --scope replaces that default list (comma-separated exact hosts); include the target if needed.\n  --scope-file is a scope.yaml with target, max_depth, allow_destructive, authorized_by and authorized_at; destructive probes require a matching target host, max_depth: write and allow_destructive: true. Host matching ignores scheme and port. --godmode requires this file or interactive confirmation.\n  --bearer and --cookie send credentials to scoped requests; treat outputs and checkpoints as sensitive.\n\nCONFIGURATION:\n  Optional ./riftlock.toml keys: target, depth (0=normal, nonzero=read), format, wordlist, discovery_budget.\n  Explicit CLI options override config defaults. See scan --help for every option."
 )]
 struct Cli {
     #[command(subcommand)]
@@ -112,7 +115,7 @@ enum Command {
     },
     /// Run provider scanners against a URL with full depth/format control.
     Scan {
-        /// Target URL (or set `target` in riftlock.toml).
+        /// Target URL (or set `target` in riftlock.toml). When omitted, a configured target is required.
         url: Option<String>,
         /// Bearer token sent as the default Authorization header.
         #[arg(long)]
@@ -124,25 +127,24 @@ enum Command {
         /// `auto` runs every scanner whose `matches()` accepts the URL.
         #[arg(long, default_value = "auto")]
         provider: String,
-        /// Scan depth: `normal` is passive reconnaissance only (no payloads);
-        /// `read` adds safe active checks. Defaults to `read`; the all-probes
-        /// `godmode` tier is selected with `--godmode`.
+        /// Scan depth. `normal` is passive reconnaissance; `read` is safe active
+        /// checking (default). Use `--godmode` for high-impact probes.
         #[arg(long, value_enum)]
         depth: Option<DepthArg>,
         /// Suppress engine lifecycle progress and the final human-readable terminal summary.
         #[arg(long)]
         quiet: bool,
-        /// Path to a scope.yaml authorizing this scan.
+        /// Authorization file (YAML). Destructive probes require matching target host, max_depth: write and allow_destructive: true. Without it, --godmode requires interactive confirmation; non-interactive runs are refused.
         #[arg(long, value_name = "PATH")]
         scope_file: Option<String>,
-        /// Scope origins, comma-separated. Empty: the target's own origin.
+        /// Comma-separated authorized origins. A non-empty value replaces the default target origin; include the target explicitly if it should remain in scope.
         #[arg(long, default_value = "")]
         scope: String,
         /// Output format: human|json|ndjson|sarif|html|md|pdf (default:
         /// human).
         #[arg(long, value_enum)]
         format: Option<Format>,
-        /// Write the selected-format report to this path; a timestamped HTML report is also saved automatically.
+        /// Write the selected-format report to this path; with human output this writes SARIF. The HTML report is also saved automatically.
         #[arg(long, value_name = "PATH")]
         output: Option<String>,
         /// Reveal full credential values in interactive terminal output only.
@@ -166,7 +168,7 @@ enum Command {
         discovery_budget: Option<u64>,
         /// Godmode preset for authorized pentests: all probe classes, 50 RPS,
         /// all providers, large wordlists and destructive payloads. Requires
-        /// normal scope authorization. You own this target.
+        /// --scope-file authorization or interactive confirmation on a TTY.
         #[arg(long)]
         godmode: bool,
         /// Resume an interrupted scan from its checkpoint (the scan id the
@@ -177,6 +179,9 @@ enum Command {
         resume: Option<String>,
     },
     /// One-shot audit: all scanners, read depth by default, SARIF report.
+    #[command(
+        after_help = "Writes `riftlock-report.sarif` in the current directory. Defaults to safe read-depth checks. A scope file enables godmode probes only when its target host matches, `max_depth` is `write` and `allow_destructive: true`. `--godmode` without a scope file requires typing `yes` on a TTY; non-interactive runs are refused. Exit status: 0 clean, 1 findings, 2 error/incomplete, 3 authorization refusal."
+    )]
     Audit {
         /// Target URL.
         url: String,
@@ -186,8 +191,8 @@ enum Command {
         #[arg(long, value_name = "PATH")]
         scope_file: Option<String>,
         /// Godmode preset for authorized pentests: all probe classes, 50 RPS,
-        /// all providers and destructive payloads. Still requires normal scope
-        /// authorization: the scope file or interactive confirmation.
+        /// all providers and destructive payloads. Requires --scope-file or
+        /// interactive confirmation on a TTY.
         #[arg(long)]
         godmode: bool,
     },
@@ -844,8 +849,34 @@ fn resolve_lab_guard(
             }
         };
     }
-    eprintln!("[!] GODMODE: destructive payloads enabled.");
+    if !confirm_godmode(parsed.host_str().unwrap_or(url)) {
+        return Err(EXIT_SCOPE);
+    }
     Ok(Some(riftlock_core::LabGuard::new_unsafe()))
+}
+
+/// Interactive authorization for `--godmode` without a scope file. Destructive
+/// probes must be acknowledged by a human; a non-interactive stdin (CI, pipes)
+/// is refused instead of silently proceeding.
+fn confirm_godmode(host: &str) -> bool {
+    use std::io::{BufRead, IsTerminal, Write};
+    let stdin = std::io::stdin();
+    if !stdin.is_terminal() {
+        eprintln!(
+            "error: --godmode requires --scope-file with allow_destructive: true when stdin is not a terminal"
+        );
+        return false;
+    }
+    eprintln!("[!] GODMODE enables destructive probes against {host}.");
+    eprint!("Type 'yes' to confirm you own this target: ");
+    if std::io::stderr().flush().is_err() {
+        return false;
+    }
+    let mut answer = String::new();
+    if stdin.lock().read_line(&mut answer).is_err() {
+        return false;
+    }
+    answer.trim().eq_ignore_ascii_case("yes")
 }
 
 /// Re-admit checkpoint-restored evidence through the proof gate: the gate
@@ -2101,12 +2132,12 @@ fn render_html(
 ) -> String {
     let all: Vec<Finding> = findings.iter().chain(chains.iter()).cloned().collect();
     let summary = riftlock_report::summarize(report.findings);
-    let tested = ui::final_report::tested_segments(report);
+    let tested = ui::final_report::tested_surface(report);
     let context = riftlock_report::HtmlContext {
         summary: &summary,
         incomplete_coverage,
         has_findings,
-        tested_segments: &tested,
+        tested: &tested,
         auth_required: report.coverage.endpoints_auth_required,
         timed_out: report.coverage.endpoints_timed_out,
     };
@@ -2159,7 +2190,6 @@ async fn scan_cmd(url: &str, mut opts: ScanOptions<'_>) -> i32 {
     // of depth or the selected stdout format.
     let save_html = true;
     if opts.godmode {
-        print_godmode_banner();
         opts.depth = Depth::Godmode;
         opts.rps = 50;
         // Keep caller scope authorization intact; godmode does not erase scope files.
@@ -2200,14 +2230,21 @@ async fn scan_cmd(url: &str, mut opts: ScanOptions<'_>) -> i32 {
         Ok(g) => g,
         Err(code) => return code,
     };
-    // Empty scope: the exact target origin is the scope, so
-    // `riftlock scan https://example.com` just works.
+    if opts.godmode {
+        print_godmode_banner();
+    }
+    // A non-empty --scope replaces the implicit target origin, and only the
+    // explicitly listed hosts are fetched.
     let default_origin;
     let origins: Vec<&str> = if opts.scope.is_empty() {
         default_origin = scope_origin(&parsed);
         vec![default_origin.as_str()]
     } else {
-        opts.scope.split(',').filter(|s| !s.is_empty()).collect()
+        opts.scope
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .collect()
     };
     let started = std::time::Instant::now();
     let policy = if matches!(opts.depth, Depth::Normal | Depth::Read) {
@@ -2448,7 +2485,20 @@ async fn scan_cmd(url: &str, mut opts: ScanOptions<'_>) -> i32 {
                 return EXIT_ERROR;
             };
             let all: Vec<Finding> = findings.iter().chain(chains.iter()).cloned().collect();
-            let bytes = match riftlock_report::to_pdf(&all) {
+            let report = ui::final_report::FinalReport {
+                target: url,
+                mode: opts.depth.label(),
+                elapsed: started.elapsed(),
+                findings: &findings,
+                records: &untested_surface,
+                unreached: &unreached_endpoints,
+                methods: &checkpoint.discovered_endpoint_methods,
+                coverage: &snapshot,
+                incomplete_coverage: !state.verdict.coverage_complete,
+                has_findings: state.verdict.has_findings(),
+            };
+            let tested = ui::final_report::tested_surface(&report);
+            let bytes = match riftlock_report::to_pdf(&all, &tested) {
                 Ok(b) => b,
                 Err(e) => {
                     eprintln!("error: {e}");
@@ -2552,7 +2602,6 @@ async fn scan_cmd(url: &str, mut opts: ScanOptions<'_>) -> i32 {
             coverage: &snapshot,
             incomplete_coverage: !state.verdict.coverage_complete,
             has_findings: state.verdict.has_findings(),
-            discovered: endpoints_discovered,
         };
         for line in ui::final_report::render_final_report(&report) {
             println!("{line}");
@@ -2573,7 +2622,6 @@ async fn scan_cmd(url: &str, mut opts: ScanOptions<'_>) -> i32 {
                 coverage: &snapshot,
                 incomplete_coverage: !state.verdict.coverage_complete,
                 has_findings: state.verdict.has_findings(),
-                discovered: endpoints_discovered,
             };
             let rendered = render_html(
                 &findings,
@@ -2620,9 +2668,6 @@ fn exit_code(status: RunStatus) -> i32 {
 /// The `audit` super command: all scanners, read depth unless a scope file
 /// authorizes write, SARIF report to ./riftlock-report.sarif.
 async fn audit_cmd(url: &str, scope_file: Option<String>, godmode: bool) -> i32 {
-    if godmode {
-        print_godmode_banner();
-    }
     let parsed = match Url::parse(url) {
         Ok(u) => u,
         Err(e) => {
@@ -2666,6 +2711,9 @@ async fn audit_cmd(url: &str, scope_file: Option<String>, godmode: bool) -> i32 
             }
         },
     };
+    if godmode {
+        print_godmode_banner();
+    }
     // Godmode pacing applies to the audit preset too; the process default is
     // the Read rate.
     let rps = if depth == Depth::Godmode {
@@ -2984,7 +3032,6 @@ mod tests {
             coverage: &riftlock_report::ScanCoverage::default(),
             incomplete_coverage: false,
             has_findings: true,
-            discovered: 0,
         };
         let stdout_report = ui::final_report::render_final_report(&final_report).join("\n");
         let html_report = render_html(
@@ -3007,9 +3054,9 @@ mod tests {
             resolve_lab_guard("https://lab.example", &url, Depth::Read, None)
                 .is_ok_and(|g| g.is_none())
         );
-        // Godmode without a scope file goes through interactive
-        // confirmation, which cannot be exercised without stdin in a test;
-        // there is no flag that skips it.
+        // Godmode without a scope file requires the interactive
+        // confirmation, which cannot be exercised without a tty in a test.
+        // `--scope-file` is the scriptable, written-authorization path.
     }
 
     #[tokio::test]

@@ -23,7 +23,6 @@ pub struct FinalReport<'a> {
     pub incomplete_coverage: bool,
     /// Whether the authoritative run verdict counted any findings.
     pub has_findings: bool,
-    pub discovered: usize,
 }
 
 /// Render the complete end-of-scan summary without writing to stdout.
@@ -185,16 +184,17 @@ pub fn render_final_report(report: &FinalReport<'_>) -> Vec<String> {
     lines
 }
 
-/// Coverage summary segments ("Pages: N", "Forms: ...", "APIs: ...") shared
-/// with the HTML report so both renderers describe the same tested surface.
+/// Tested-surface inventory shared by the terminal, HTML and PDF reports so
+/// every format describes the same pages, forms and APIs.
 #[must_use]
-pub fn tested_segments(report: &FinalReport<'_>) -> Vec<String> {
+pub fn tested_surface(report: &FinalReport<'_>) -> riftlock_report::TestedSurface {
     let method_map = methods_by_path(report.methods);
     let inventory = endpoint_inventory(report, &method_map);
-    let pages = inventory
+    let pages: BTreeSet<_> = inventory
         .iter()
         .filter(|entry| category(entry) == 0)
-        .count();
+        .map(|entry| full_url(report.target, &entry.path))
+        .collect();
     let forms: BTreeSet<_> = inventory
         .iter()
         .filter(|entry| category(entry) == 1)
@@ -205,12 +205,25 @@ pub fn tested_segments(report: &FinalReport<'_>) -> Vec<String> {
         .filter(|entry| category(entry) == 3)
         .map(|entry| full_url(report.target, &entry.path))
         .collect();
-    let mut segments = vec![format!("Pages: {}", report.discovered.max(pages))];
-    if !forms.is_empty() {
-        segments.push(format!("Forms: {}", display_list(&forms)));
+    riftlock_report::TestedSurface {
+        page_count: pages.len(),
+        pages: pages.into_iter().collect(),
+        forms: forms.into_iter().collect(),
+        apis: apis.into_iter().collect(),
     }
-    if !apis.is_empty() {
-        segments.push(format!("APIs: {}", display_list(&apis)));
+}
+
+/// Coverage summary segments ("Pages: N", "Forms: ...", "APIs: ...") for the
+/// terminal report.
+#[must_use]
+pub fn tested_segments(report: &FinalReport<'_>) -> Vec<String> {
+    let surface = tested_surface(report);
+    let mut segments = vec![format!("Pages: {}", surface.page_count)];
+    if !surface.forms.is_empty() {
+        segments.push(format!("Forms: {}", surface.forms.join(", ")));
+    }
+    if !surface.apis.is_empty() {
+        segments.push(format!("APIs: {}", surface.apis.join(", ")));
     }
     segments
 }
@@ -328,14 +341,6 @@ fn plain_details(variant: &str) -> (&'static str, &'static str, &'static str) {
             "Someone may use it to access information or take actions they should not be able to.",
             "Ask your developer to review this issue and make the affected request safe.",
         ),
-    }
-}
-
-fn display_list(items: &BTreeSet<String>) -> String {
-    if items.is_empty() {
-        "none found".into()
-    } else {
-        items.iter().cloned().collect::<Vec<_>>().join(", ")
     }
 }
 
@@ -467,18 +472,16 @@ fn category(entry: &EndpointLine) -> usize {
 }
 
 fn endpoint_path(url: &str) -> String {
+    // Query strings often contain API keys, signed URLs, or session material.
+    // Reports need the endpoint path, not request parameters; omit the query
+    // both to avoid leaking secrets and to deduplicate parameterized variants.
     url::Url::parse(url).map_or_else(
-        |_| url.to_owned(),
+        |_| url.split('?').next().unwrap_or(url).to_owned(),
         |parsed| {
-            let mut path = parsed.path().to_owned();
-            if let Some(query) = parsed.query() {
-                path.push('?');
-                path.push_str(query);
-            }
-            if path.is_empty() {
+            if parsed.path().is_empty() {
                 "/".into()
             } else {
-                path
+                parsed.path().to_owned()
             }
         },
     )
@@ -547,7 +550,6 @@ mod tests {
             coverage,
             incomplete_coverage,
             has_findings,
-            discovered: 0,
         };
         render_final_report(&report)
     }
@@ -656,7 +658,6 @@ mod tests {
             coverage: &ScanCoverage::default(),
             incomplete_coverage: false,
             has_findings: false,
-            discovered: 2,
         };
         let inventory_report = render_final_report(&inventory_report);
         let inventory_text = inventory_report.join(" ");
@@ -892,6 +893,12 @@ mod tests {
             full_url("https://vulnerable-website.com/", "/login?next=%2F"),
             "https://vulnerable-website.com/login?next=%2F"
         );
+        assert_eq!(
+            endpoint_path("https://vulnerable-website.com/login?token=super-secret"),
+            "/login",
+            "report inventory must never expose URL query values"
+        );
+        assert_eq!(endpoint_path("/graphql?key=secret"), "/graphql");
         assert_eq!(
             full_url("not a url", "/login"),
             "/login",

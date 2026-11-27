@@ -32,10 +32,10 @@ impl ScopeConfig {
     }
 
     /// Whether destructive probes are allowed for `url`: the URL host must
-    /// match the configured target's host AND `allow_destructive` must be
-    /// true.
+    /// match the configured target's host, `allow_destructive` must be true,
+    /// and `max_depth` must be `write`.
     pub fn is_destructive_allowed(&self, url: &Url) -> bool {
-        if !self.allow_destructive {
+        if !self.allow_destructive || !self.max_depth.trim().eq_ignore_ascii_case("write") {
             return false;
         }
         let target_host = Url::parse(&self.target)
@@ -79,6 +79,29 @@ mod tests {
         let bad = write_tmp("invalid", "target: [unclosed\n");
         assert!(ScopeConfig::load(&bad).is_err());
         let _ = std::fs::remove_file(bad);
+    }
+
+    #[test]
+    fn max_depth_must_authorize_write_probes() {
+        let url = Url::parse("https://lab.example.com").expect("url");
+        for max_depth in ["normal", "read", "auth"] {
+            let cfg = ScopeConfig {
+                target: "https://lab.example.com".into(),
+                max_depth: max_depth.into(),
+                allow_destructive: true,
+                authorized_by: "ops".into(),
+                authorized_at: "2026-11-13".into(),
+            };
+            assert!(!cfg.is_destructive_allowed(&url), "{max_depth}");
+        }
+        let cfg = ScopeConfig {
+            target: "https://lab.example.com".into(),
+            max_depth: " WRITE ".into(),
+            allow_destructive: true,
+            authorized_by: "ops".into(),
+            authorized_at: "2026-11-13".into(),
+        };
+        assert!(cfg.is_destructive_allowed(&url));
     }
 
     #[test]

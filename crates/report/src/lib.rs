@@ -7,7 +7,7 @@ pub mod ndjson;
 pub mod pdf;
 pub mod sarif;
 
-pub use html::{to_html, to_html_with_context, to_html_with_status, HtmlContext};
+pub use html::{to_html, to_html_with_context, to_html_with_status, HtmlContext, TestedSurface};
 pub use markdown::{to_markdown, to_markdown_with_status};
 pub use metadata::{ScanMetadata, REPORT_SCHEMA_VERSION};
 pub use ndjson::to_ndjson;

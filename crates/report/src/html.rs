@@ -14,8 +14,22 @@ fn esc(s: &str) -> String {
         .replace('\'', "&#39;")
 }
 
+/// Tested surface shown in the WE ALSO TESTED section. Each form and API
+/// entry renders on its own line so a printed report stays readable.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TestedSurface {
+    /// Number of pages discovered.
+    pub page_count: usize,
+    /// Page URLs, each shown on its own line in reports.
+    pub pages: Vec<String>,
+    /// Form endpoint URLs.
+    pub forms: Vec<String>,
+    /// API endpoint URLs.
+    pub apis: Vec<String>,
+}
+
 /// Report data the findings list cannot supply on its own: the shared
-/// follow-up grouping, the coverage summary line, and the scan status.
+/// follow-up grouping, the tested surface, and the scan status.
 #[derive(Debug)]
 pub struct HtmlContext<'a> {
     /// Finding groups shared with the terminal report.
@@ -24,8 +38,8 @@ pub struct HtmlContext<'a> {
     pub incomplete_coverage: bool,
     /// Whether the authoritative run verdict counted any findings.
     pub has_findings: bool,
-    /// Coverage summary segments ("Pages: N", "Forms: ...", "APIs: ...").
-    pub tested_segments: &'a [String],
+    /// Pages, forms and APIs the scan covered.
+    pub tested: &'a TestedSurface,
     /// Endpoints skipped because they require authentication.
     pub auth_required: u64,
     /// Endpoints that timed out.
@@ -141,12 +155,27 @@ fn to_html_inner(
     });
 
     let tested_body = context.map_or_else(String::new, |ctx| {
-        let summary = ctx.tested_segments.join("  |  ");
-        if summary.is_empty() {
-            String::new()
-        } else {
-            format!("<p>{}</p>\n", esc(&summary))
+        let mut out = format!(
+            "<p class=\"tested-count\">Pages: {}</p>\n",
+            ctx.tested.page_count
+        );
+        for (label, entries) in [
+            ("Pages", &ctx.tested.pages),
+            ("Forms", &ctx.tested.forms),
+            ("APIs", &ctx.tested.apis),
+        ] {
+            if entries.is_empty() {
+                continue;
+            }
+            out.push_str(&format!(
+                "<p class=\"tested-label\">{label}:</p>\n<ul class=\"tested-list\">\n",
+            ));
+            for entry in entries {
+                out.push_str(&format!("<li>{}</li>\n", esc(entry)));
+            }
+            out.push_str("</ul>\n");
         }
+        out
     });
 
     let issue_count = summary.urgent_group_count;
@@ -284,6 +313,11 @@ fn to_html_inner(
                                  margin-right: 10px; background: var(--info); content: "";
                                  vertical-align: -3px; }}
   .scan-status, .clean {{ color: var(--text); }}
+  .tested-count {{ margin: 0; }}
+  .tested-label {{ margin: 14px 0 4px; color: var(--muted); font-weight: 600; }}
+  .tested-list {{ margin: 0; padding-left: 20px; }}
+  .tested-list li {{ margin: 3px 0; font: 13px ui-monospace, "SF Mono", Menlo, monospace;
+                     overflow-wrap: anywhere; }}
   a {{ color: var(--accent); }}
   a:focus {{ outline: 2px solid var(--accent); outline-offset: 2px; }}
   @media (max-width: 600px) {{
@@ -443,16 +477,17 @@ mod tests {
             severity: "Low".into(),
         });
         let summary = crate::summarize(std::slice::from_ref(&finding));
-        let tested = vec![
-            "Pages: 4".to_string(),
-            "Forms: https://x/submit".to_string(),
-            "APIs: https://x/graphql".to_string(),
-        ];
+        let tested = TestedSurface {
+            page_count: 4,
+            pages: vec!["https://x/".into(), "https://x/about".into()],
+            forms: vec!["https://x/submit".into()],
+            apis: vec!["https://x/graphql".into(), "https://x/rest".into()],
+        };
         let context = HtmlContext {
             summary: &summary,
             incomplete_coverage: true,
             has_findings: true,
-            tested_segments: &tested,
+            tested: &tested,
             auth_required: 2,
             timed_out: 1,
         };
@@ -460,8 +495,15 @@ mod tests {
         assert!(out.contains(
             "<div class=\"check-block\"><div class=\"check-label\">Missing security headers (1)</div><div class=\"check-effect\">Browsers have fewer defenses against some attacks. Easy to fix.</div></div>"
         ));
+        assert!(out.contains("<p class=\"tested-count\">Pages: 4</p>"));
+        assert!(out.contains("<p class=\"tested-label\">APIs:</p>"));
+        // Each tested URL gets its own list item, in its own line.
+        assert!(out.contains("<li>https://x/submit</li>\n"));
+        assert!(out.contains("<li>https://x/graphql</li>\n"));
+        assert!(out.contains("<li>https://x/rest</li>\n"));
         assert!(
-            out.contains("<p>Pages: 4  |  Forms: https://x/submit  |  APIs: https://x/graphql</p>")
+            !out.contains("https://x/graphql, https://x/rest"),
+            "API URLs must not share one comma-separated line"
         );
         assert!(out.contains("<h2>ABOUT THIS SCAN</h2>"));
         assert!(out.contains("Scan status: FINDINGS (partial coverage)"));
@@ -481,7 +523,7 @@ mod tests {
                 summary: &summary,
                 incomplete_coverage,
                 has_findings,
-                tested_segments: &tested,
+                tested: &tested,
                 auth_required: 0,
                 timed_out: 0,
             };
