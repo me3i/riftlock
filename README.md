@@ -1,4 +1,29 @@
-# Riftlock
+<div align="center">
+  <img src="assets/riftlock-banner.jpg" alt="Nighttime city street" width="100%" />
+
+  <h1>RIFTLOCK</h1>
+
+  <p><strong>Find the gap. Prove the exposure.</strong></p>
+
+  <p>
+    Evidence-first security assessment for web applications and BaaS.<br />
+    Built in Rust. Designed for authorized testing.
+  </p>
+
+  <p>
+    <a href="#quick-start">Get started</a> ·
+    <a href="#capabilities">Explore capabilities</a> ·
+    <a href="#safety-model">Read the safety model</a>
+  </p>
+
+  <p>
+    <img src="https://img.shields.io/badge/Rust-2021-8B5CF6?style=flat-square&logo=rust&logoColor=white" alt="Rust 2021" />
+    <img src="https://img.shields.io/badge/Approach-Evidence--first-14B8A6?style=flat-square" alt="Evidence-first" />
+    <img src="https://img.shields.io/badge/Use-Authorized%20testing-F97316?style=flat-square" alt="Authorized testing only" />
+  </p>
+</div>
+
+---
 
 Riftlock is a Rust command-line security assessment tool for web applications and backend-as-a-service (BaaS) deployments. It combines discovery, provider-specific scanners, general web checks, and evidence-oriented reporting in one workspace. Use it only on systems you own or have explicit authorization to test.
 
