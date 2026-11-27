@@ -49,15 +49,15 @@ riftlock scan https://your-authorized-target.example --depth read
 
 ### `--godmode` — full authorized penetration test
 
-Unlocks every probe class — injection, authentication bypass, and broad parameter fuzzing — across all providers, with larger wordlists at 50 requests/second. These probes can corrupt data or break the target, so godmode requires explicit authorization: a scope file with `max_depth: write` and `allow_destructive: true` for the target host, or an interactive `yes` at the terminal. Non-interactive godmode without a scope file is refused.
+Unlocks every probe class — injection, authentication bypass, and broad parameter fuzzing — across all providers, with larger wordlists at 50 requests/second. These probes can corrupt data or break the target, so godmode requires explicit authorization: an interactive operator must type `yes` at the terminal, and non-interactive runs are refused.
 
 ```sh
-riftlock scan https://your-authorized-target.example --godmode --scope-file authorized.yaml
-riftlock audit https://your-authorized-target.example --godmode --scope-file authorized.yaml
+riftlock scan https://your-authorized-target.example --godmode
+riftlock audit https://your-authorized-target.example --godmode
 ```
 
 > [!WARNING]
-> Godmode is destructive by design. Run it only against systems you own or have written permission to test. See [Scope and authorization](#scope-and-authorization) for the scope file format.
+> Godmode is destructive by design. Run it only against systems you own or have written permission to test.
 
 ## Quick start
 
@@ -86,18 +86,6 @@ riftlock scan https://app.example.test --scope https://app.example.test,https://
 ```
 
 The default `--depth read` performs safe active checks; state-changing methods are blocked. `--depth normal` performs passive discovery and fingerprinting without active payloads, but may still send GET requests for passive observations. Rate limits are 5 requests/second for `normal`, 20 for `read`, and 50 for `--godmode`.
-
-`--godmode` enables destructive/high-impact probes and requires explicit authorization. A matching scope file must set `max_depth: write` and `allow_destructive: true`; without a scope file, an interactive operator must type `yes` at the TTY prompt. Non-interactive godmode without a scope file is refused. Example scope file:
-
-```yaml
-target: https://your-authorized-target.example
-max_depth: write
-allow_destructive: true
-authorized_by: "Your name or team"
-authorized_at: "2026-11-27T12:00:00Z"
-```
-
-The scope file's `target` must have the same host as the scan URL; scheme and port do not affect this match. `--scope` separately controls which hosts Riftlock may request.
 
 ## Configuration and discovery
 
