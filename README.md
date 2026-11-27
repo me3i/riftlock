@@ -12,7 +12,7 @@ Install the latest Linux release. Release binaries are prebuilt, so Rust is not 
 
 ```sh
 curl -fL --retry 5 --retry-all-errors --connect-timeout 15 \
-  https://cdn.jsdelivr.net/gh/me3i/riftlock@806304d/install.sh -o install.sh
+  https://cdn.jsdelivr.net/gh/me3i/riftlock@f8879a8/install.sh -o install.sh
 bash install.sh
 ```
 
