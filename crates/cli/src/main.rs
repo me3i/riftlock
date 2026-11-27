@@ -2021,6 +2021,27 @@ fn saved_path_display(path: &str) -> String {
     }
 }
 
+/// Explain where the generated HTML report was saved and provide a terminal
+/// hyperlink when the output stream supports OSC 8 hyperlinks.
+fn html_report_location_message(path: &str, hyperlink: bool) -> String {
+    let display_path = saved_path_display(path);
+    let report_path = std::path::Path::new(&display_path);
+    let directory = report_path
+        .parent()
+        .map_or_else(|| ".".to_owned(), |parent| parent.display().to_string());
+    let open_target = url::Url::from_file_path(report_path)
+        .ok()
+        .map(|uri| uri.to_string());
+    let open_link = match open_target {
+        Some(uri) if hyperlink => format!("\x1b]8;;{uri}\x1b\\open report\x1b]8;;\x1b\\"),
+        Some(uri) => uri,
+        None => display_path.clone(),
+    };
+    format!(
+        "[+] HTML report generated\n    File: {display_path}\n    Directory: {directory}\n    Open: {open_link}"
+    )
+}
+
 fn report_filename(host: &str, mode: &str, started_at: SystemTime) -> String {
     let timestamp = started_at.duration_since(UNIX_EPOCH).unwrap_or_default();
     let seconds = timestamp.as_secs();
@@ -2595,7 +2616,13 @@ async fn scan_cmd(url: &str, mut opts: ScanOptions<'_>) -> i32 {
                 eprintln!("error: cannot write {path}: {e}");
                 return EXIT_ERROR;
             }
-            let saved = format!("[+] HTML report generated at: {}", saved_path_display(path));
+            use std::io::IsTerminal;
+            let output_is_terminal = if human {
+                std::io::stdout().is_terminal()
+            } else {
+                std::io::stderr().is_terminal()
+            };
+            let saved = html_report_location_message(path, output_is_terminal);
             if human {
                 println!("{}", ui::theme::scanning(&saved));
             } else {

@@ -50,11 +50,24 @@ async fn json_stdout_is_one_parseable_document() {
     );
     let report_path = stderr
         .lines()
-        .find_map(|line| {
-            line.rsplit_once("HTML report generated at: ")
-                .map(|(_, p)| p)
-        })
+        .find_map(|line| line.strip_prefix("    File: "))
         .expect("read-depth scan should announce its automatic HTML report path");
+    let report_directory = stderr
+        .lines()
+        .find_map(|line| line.strip_prefix("    Directory: "))
+        .expect("read-depth scan should announce its report directory");
+    assert_eq!(
+        std::path::Path::new(report_path)
+            .parent()
+            .map(std::path::Path::to_str)
+            .flatten(),
+        Some(report_directory),
+        "reported directory should contain the HTML report"
+    );
+    assert!(
+        stderr.contains("    Open: file://"),
+        "missing open link: {stderr}"
+    );
     assert!(
         report_path.ends_with(".html"),
         "unexpected report path: {report_path}"
