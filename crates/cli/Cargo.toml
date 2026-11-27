@@ -1,0 +1,55 @@
+[package]
+name = "riftlock-cli"
+version = "1.1.0"
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "riftlock"
+path = "src/main.rs"
+
+[dependencies]
+riftlock-core.workspace = true
+riftlock-fingerprint.workspace = true
+riftlock-scanner-smuggling.workspace = true
+riftlock-scanner-oauth.workspace = true
+riftlock-scanner-supabase.workspace = true
+riftlock-scanner-grpc.workspace = true
+riftlock-scanner-generic.workspace = true
+riftlock-scanner-spa.workspace = true
+riftlock-scanner-openapi.workspace = true
+riftlock-scanner-auth.workspace = true
+riftlock-scanner-misconfig.workspace = true
+riftlock-scanner-infra.workspace = true
+riftlock-scanner-llm.workspace = true
+riftlock-scanner-sse.workspace = true
+riftlock-scanner-clientside.workspace = true
+riftlock-scanner-supplychain.workspace = true
+riftlock-scanner-websocket.workspace = true
+riftlock-scanner-nextjs.workspace = true
+riftlock-scanner-clerk.workspace = true
+riftlock-scanner-source.workspace = true
+riftlock-scanner-firebase.workspace = true
+riftlock-scanner-appwrite.workspace = true
+riftlock-scanner-cache.workspace = true
+riftlock-scanner-path.workspace = true
+riftlock-scanner-graphql.workspace = true
+riftlock-scanner-ssrf.workspace = true
+riftlock-scanner-race.workspace = true
+riftlock-scanner-signedurl.workspace = true
+riftlock-scanner-prototype.workspace = true
+riftlock-discovery.workspace = true
+riftlock-engine.workspace = true
+riftlock-report.workspace = true
+clap.workspace = true
+tokio.workspace = true
+governor.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+url.workspace = true
+colored.workspace = true
+futures-util.workspace = true
+
+[dev-dependencies]
+wiremock.workspace = true

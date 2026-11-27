@@ -1,0 +1,16 @@
+[package]
+name = "riftlock-scanner-clerk"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+riftlock-core.workspace = true
+riftlock-fingerprint.workspace = true
+reqwest.workspace = true
+regex.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+wiremock.workspace = true

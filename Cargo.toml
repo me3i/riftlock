@@ -1,0 +1,110 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/core",
+    "crates/fingerprint",
+    "crates/discovery",
+    "crates/engine",
+    "crates/report",
+    "crates/scanners/supabase",
+    "crates/scanners/nextjs",
+    "crates/scanners/clerk",
+    "crates/scanners/source",
+    "crates/scanners/firebase",
+    "crates/scanners/appwrite",
+    "crates/scanners/cache",
+    "crates/scanners/path",
+    "crates/scanners/graphql",
+    "crates/scanners/ssrf",
+    "crates/scanners/race",
+    "crates/scanners/signedurl",
+    "crates/scanners/prototype",
+    "crates/scanners/smuggling",
+    "crates/scanners/websocket",
+    "crates/scanners/oauth",
+    "crates/scanners/sse",
+    "crates/scanners/misconfig",
+    "crates/scanners/infra",
+    "crates/scanners/clientside",
+    "crates/scanners/supplychain",
+    "crates/scanners/llm",
+    "crates/scanners/grpc",
+    "crates/scanners/generic",
+    "crates/scanners/spa",
+    "crates/scanners/openapi",
+    "crates/scanners/auth",
+    "crates/cli",
+]
+
+[workspace.package]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+riftlock-core = { path = "crates/core" }
+riftlock-fingerprint = { path = "crates/fingerprint" }
+riftlock-discovery = { path = "crates/discovery" }
+riftlock-scanner-source = { path = "crates/scanners/source" }
+riftlock-engine = { path = "crates/engine" }
+riftlock-report = { path = "crates/report" }
+serde-sarif = "0.8"
+riftlock-scanner-supabase = { path = "crates/scanners/supabase" }
+riftlock-scanner-nextjs = { path = "crates/scanners/nextjs" }
+riftlock-scanner-clerk = { path = "crates/scanners/clerk" }
+riftlock-scanner-firebase = { path = "crates/scanners/firebase" }
+riftlock-scanner-appwrite = { path = "crates/scanners/appwrite" }
+riftlock-scanner-cache = { path = "crates/scanners/cache" }
+riftlock-scanner-path = { path = "crates/scanners/path" }
+riftlock-scanner-graphql = { path = "crates/scanners/graphql" }
+riftlock-scanner-ssrf = { path = "crates/scanners/ssrf" }
+riftlock-scanner-race = { path = "crates/scanners/race" }
+riftlock-scanner-signedurl = { path = "crates/scanners/signedurl" }
+riftlock-scanner-prototype = { path = "crates/scanners/prototype" }
+riftlock-scanner-smuggling = { path = "crates/scanners/smuggling" }
+riftlock-scanner-websocket = { path = "crates/scanners/websocket" }
+riftlock-scanner-oauth = { path = "crates/scanners/oauth" }
+riftlock-scanner-sse = { path = "crates/scanners/sse" }
+riftlock-scanner-clientside = { path = "crates/scanners/clientside" }
+riftlock-scanner-supplychain = { path = "crates/scanners/supplychain" }
+riftlock-scanner-llm = { path = "crates/scanners/llm" }
+riftlock-scanner-grpc = { path = "crates/scanners/grpc" }
+riftlock-scanner-generic = { path = "crates/scanners/generic" }
+riftlock-scanner-spa = { path = "crates/scanners/spa" }
+riftlock-scanner-openapi = { path = "crates/scanners/openapi" }
+riftlock-scanner-auth = { path = "crates/scanners/auth" }
+riftlock-scanner-misconfig = { path = "crates/scanners/misconfig" }
+riftlock-scanner-infra = { path = "crates/scanners/infra" }
+governor = "0.10" # token-bucket rate limiting (5 req/s) shared across spawned scanner tasks
+printpdf = "0.7" # PDF report rendering (Phases 25-28 ecosystem export)
+toml = "0.8" # riftlock.toml config-file parsing (Phases 25-28 ecosystem)
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+serde_yaml_ng = "0.10"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream", "gzip", "brotli", "deflate"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "time", "io-util", "test-util"] }
+async-trait = "0.1"
+futures-util = { version = "0.3", default-features = false, features = ["std", "sink"] }
+bytes = "1"
+tokio-tungstenite = { version = "0.24", default-features = false, features = ["connect", "handshake", "rustls-tls-webpki-roots"] }
+oxc_allocator = "0.158"
+oxc_ast = "0.158"
+oxc_ast_visit = "0.158"
+oxc_parser = "0.158"
+oxc_span = "0.158"
+clap = { version = "4", features = ["derive"] }
+regex = "1"
+sha2 = "0.10"
+hex = "0.4"
+# Dev-only (core tests): builds http::Response wrappers around streaming
+# bodies to test the 5 MiB cap; already in the lock graph via reqwest.
+http = "1"
+httpdate = "1"
+base64 = "0.22"
+url = "2"
+tree-sitter = "0.27"
+tree-sitter-javascript = "0.25"
+tree-sitter-typescript = "0.23"
+wiremock = "0.6"
+scraper = "0.29"
+colored = "2"

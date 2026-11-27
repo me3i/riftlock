@@ -1,0 +1,3 @@
+/target/
+/riftlock-checkpoint-scan-*.json
+/riftlock-report.sarif

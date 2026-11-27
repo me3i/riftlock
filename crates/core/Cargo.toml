@@ -1,0 +1,27 @@
+[package]
+name = "riftlock-core"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+serde.workspace = true
+serde_yaml_ng.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+reqwest.workspace = true
+url.workspace = true
+governor.workspace = true
+http.workspace = true
+httpdate.workspace = true
+tokio.workspace = true
+futures-util.workspace = true
+bytes.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+futures-util.workspace = true
+http.workspace = true
+wiremock.workspace = true
+async-trait.workspace = true
