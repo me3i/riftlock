@@ -2003,6 +2003,24 @@ fn scope_origin(url: &Url) -> String {
 
 /// Build the unique report filename from the target host, resolved depth and
 /// scan-start UTC timestamp. Hostnames are kept intact; URL paths are excluded.
+/// Absolute location of a report just written, so the "saved to" line names
+/// the directory even when the caller passed a bare filename. Falls back to
+/// the path as given if the working directory cannot be read.
+fn saved_path_display(path: &str) -> String {
+    if let Ok(canonical) = std::fs::canonicalize(path) {
+        return canonical.display().to_string();
+    }
+    let p = std::path::Path::new(path);
+    if p.is_absolute() {
+        path.to_string()
+    } else {
+        match std::env::current_dir() {
+            Ok(cwd) => cwd.join(p).display().to_string(),
+            Err(_) => path.to_string(),
+        }
+    }
+}
+
 fn report_filename(host: &str, mode: &str, started_at: SystemTime) -> String {
     let seconds = started_at
         .duration_since(UNIX_EPOCH)
@@ -2429,7 +2447,10 @@ async fn scan_cmd(url: &str, mut opts: ScanOptions<'_>) -> i32 {
                 }
                 println!(
                     "{}",
-                    ui::theme::scanning(&format!("[+] SARIF report saved to {path}"))
+                    ui::theme::scanning(&format!(
+                        "[+] SARIF report saved to {}",
+                        saved_path_display(path)
+                    ))
                 );
             }
         }
@@ -2453,7 +2474,10 @@ async fn scan_cmd(url: &str, mut opts: ScanOptions<'_>) -> i32 {
             }
             println!(
                 "{}",
-                ui::theme::scanning(&format!("[+] PDF report saved to {path}"))
+                ui::theme::scanning(&format!(
+                    "[+] PDF report saved to {}",
+                    saved_path_display(path)
+                ))
             );
         }
         other => {
@@ -2472,8 +2496,9 @@ async fn scan_cmd(url: &str, mut opts: ScanOptions<'_>) -> i32 {
                             return EXIT_ERROR;
                         }
                         let saved = format!(
-                            "[+] {} report saved to {path}",
-                            format!("{other:?}").to_lowercase()
+                            "[+] {} report saved to {}",
+                            format!("{other:?}").to_lowercase(),
+                            saved_path_display(path)
                         );
                         if human {
                             println!("{}", ui::theme::scanning(&saved));
@@ -2574,7 +2599,7 @@ async fn scan_cmd(url: &str, mut opts: ScanOptions<'_>) -> i32 {
                 eprintln!("error: cannot write {path}: {e}");
                 return EXIT_ERROR;
             }
-            let saved = format!("[+] html report saved to {path}");
+            let saved = format!("[+] html report saved to {}", saved_path_display(path));
             if human {
                 println!("{}", ui::theme::scanning(&saved));
             } else {
@@ -2698,8 +2723,9 @@ async fn audit_cmd(
         return EXIT_ERROR;
     }
     println!(
-        "Audit complete. Found {} findings. Report saved to {path}",
-        findings.len() + chains.len()
+        "Audit complete. Found {} findings. Report saved to {}",
+        findings.len() + chains.len(),
+        saved_path_display(path)
     );
     for f in &findings {
         ui::findings::print_finding(f);
