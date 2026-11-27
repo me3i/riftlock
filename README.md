@@ -32,6 +32,33 @@ cd riftlock
 
 Check `install.sh` for prerequisites on other Linux distributions. The supplied release builds are Linux-only.
 
+## Main features: active depth and godmode
+
+Riftlock exists to go past passive recon. Two settings do the real work:
+
+### `--depth read` — safe active checks (default)
+
+Sends active probes for reflection, SQL injection, open redirects, and similar issues against the live target, while blocking state-changing methods and capping traffic at 20 requests/second. This is the mode to use on production systems you are authorized to assess.
+
+```sh
+riftlock scan https://your-authorized-target.example --depth read
+```
+
+> [!TIP]
+> `read` is the default, so a plain `riftlock scan URL` already runs it.
+
+### `--godmode` — full authorized penetration test
+
+Unlocks every probe class — injection, authentication bypass, and broad parameter fuzzing — across all providers, with larger wordlists at 50 requests/second. These probes can corrupt data or break the target, so godmode requires explicit authorization: a scope file with `max_depth: write` and `allow_destructive: true` for the target host, or an interactive `yes` at the terminal. Non-interactive godmode without a scope file is refused.
+
+```sh
+riftlock scan https://your-authorized-target.example --godmode --scope-file authorized.yaml
+riftlock audit https://your-authorized-target.example --godmode --scope-file authorized.yaml
+```
+
+> [!WARNING]
+> Godmode is destructive by design. Run it only against systems you own or have written permission to test. See [Scope and authorization](#scope-and-authorization) for the scope file format.
+
 ## Quick start
 
 Only scan systems you own or have explicit permission to assess. Start with passive discovery, then use the default `read` depth for safe active checks:
