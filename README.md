@@ -8,7 +8,7 @@
 
 ## Install on Linux
 
-Install the latest Linux release. This downloads the installer from jsDelivr (not GitHub Raw), then runs it after the download completes:
+Install the latest Linux release. Release binaries are prebuilt, so Rust is not required. This downloads the installer from jsDelivr (not GitHub Raw), then runs it after the download completes:
 
 ```sh
 curl -fL --retry 5 --retry-all-errors --connect-timeout 15 \
@@ -16,7 +16,7 @@ curl -fL --retry 5 --retry-all-errors --connect-timeout 15 \
 bash install.sh
 ```
 
-If no release is available yet, clone the repository and run the installer. It builds from source, so Rust and Cargo are required:
+If the release download fails, the installer fetches the repository and builds from source, installing Rust and Cargo via rustup when they are missing (set `RIFTLOCK_INSTALL_RUST=0` to disable that and use an existing toolchain). You can also do this yourself:
 
 ```sh
 git clone https://github.com/me3i/riftlock.git
