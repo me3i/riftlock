@@ -57,6 +57,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: release-assets
@@ -72,4 +73,5 @@ jobs:
             release-assets/riftlock-x86_64-unknown-linux-musl
             release-assets/riftlock-aarch64-unknown-linux-musl
             release-assets/checksums.txt
+            install.sh
           generate_release_notes: true

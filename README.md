@@ -8,10 +8,10 @@
 
 ## Install on Linux
 
-For a published Linux release, install its prebuilt binary with:
+Install the latest Linux release (using jsDelivr if GitHub Raw is slow or unavailable):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/me3i/riftlock/main/install.sh | bash
+curl -fsSL --retry 3 --retry-all-errors https://cdn.jsdelivr.net/gh/me3i/riftlock@main/install.sh | bash
 ```
 
 If no release is available yet, clone the repository and run the installer. It builds from source, so Rust and Cargo are required:
