@@ -8,10 +8,12 @@
 
 ## Install on Linux
 
-Install the latest Linux release (using jsDelivr if GitHub Raw is slow or unavailable):
+Install the latest Linux release. This downloads the installer from jsDelivr (not GitHub Raw), then runs it after the download completes:
 
 ```sh
-curl -fsSL --retry 3 --retry-all-errors https://cdn.jsdelivr.net/gh/me3i/riftlock@main/install.sh | bash
+curl -fL --retry 5 --retry-all-errors --connect-timeout 15 \
+  https://cdn.jsdelivr.net/gh/me3i/riftlock@806304d/install.sh -o install.sh
+bash install.sh
 ```
 
 If no release is available yet, clone the repository and run the installer. It builds from source, so Rust and Cargo are required:
