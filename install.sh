@@ -41,24 +41,39 @@ if [[ -f "$SCRIPT_DIR/$ASSET" ]]; then
 else
   info "Fetching latest release..."
   BASE_URL="https://github.com/${REPO}/releases/latest/download"
+  DOWNLOAD_FAILED=0
   if command -v curl >/dev/null 2>&1; then
-    curl -fsSL "$BASE_URL/$ASSET" -o "$BINARY" || fail "Could not download $ASSET from the latest GitHub release."
-    if curl -fsSL "$BASE_URL/checksums.txt" -o "$WORK_DIR/checksums.txt"; then
-      CHECKSUM_FILE="$WORK_DIR/checksums.txt"
-    else
-      rm -f -- "$WORK_DIR/checksums.txt"
-      warn "No release checksum file was available; the download could not be checksum-verified."
-    fi
+    curl -fsSL "$BASE_URL/$ASSET" -o "$BINARY" || DOWNLOAD_FAILED=1
   elif command -v wget >/dev/null 2>&1; then
-    wget -q "$BASE_URL/$ASSET" -O "$BINARY" || fail "Could not download $ASSET from the latest GitHub release."
-    if wget -q "$BASE_URL/checksums.txt" -O "$WORK_DIR/checksums.txt"; then
-      CHECKSUM_FILE="$WORK_DIR/checksums.txt"
-    else
-      rm -f -- "$WORK_DIR/checksums.txt"
-      warn "No release checksum file was available; the download could not be checksum-verified."
-    fi
+    wget -q "$BASE_URL/$ASSET" -O "$BINARY" || DOWNLOAD_FAILED=1
   else
     fail "curl or wget is required to download a release."
+  fi
+
+  if [[ "$DOWNLOAD_FAILED" == 1 ]]; then
+    rm -f -- "$BINARY"
+    if [[ -f "$SCRIPT_DIR/Cargo.toml" ]] && command -v cargo >/dev/null 2>&1; then
+      info "No published release asset found; building from source with Cargo..."
+      (cd -- "$SCRIPT_DIR" && cargo build --release -p riftlock-cli) \
+        || fail "Source build failed. Run 'cargo build --release -p riftlock-cli' in the repository for details."
+      SOURCE_BINARY="$SCRIPT_DIR/target/release/riftlock"
+      [[ -s "$SOURCE_BINARY" ]] || fail "Source build completed but the Riftlock binary was not found."
+      cp -- "$SOURCE_BINARY" "$BINARY"
+    else
+      fail "No published release asset found for $ASSET. Clone the repository, install Rust/Cargo, then run './install.sh' to build from source."
+    fi
+  else
+    if command -v curl >/dev/null 2>&1; then
+      curl -fsSL "$BASE_URL/checksums.txt" -o "$WORK_DIR/checksums.txt" || rm -f -- "$WORK_DIR/checksums.txt"
+    else
+      wget -q "$BASE_URL/checksums.txt" -O "$WORK_DIR/checksums.txt" || rm -f -- "$WORK_DIR/checksums.txt"
+    fi
+    if [[ -s "$WORK_DIR/checksums.txt" ]]; then
+      CHECKSUM_FILE="$WORK_DIR/checksums.txt"
+    else
+      rm -f -- "$WORK_DIR/checksums.txt"
+      warn "No release checksum file was available; the download could not be checksum-verified."
+    fi
   fi
 fi
 

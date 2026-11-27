@@ -8,13 +8,13 @@
 
 ## Install on Linux
 
-Tagged releases provide prebuilt static Linux binaries for x86_64 and aarch64. Rust is not required to install or run a release binary. The installer downloads the matching binary, verifies it against the release checksum when available, and installs it to `/usr/local/bin` (using `sudo` only for the final copy).
+For a published Linux release, install its prebuilt binary with:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/me3i/riftlock/main/install.sh | bash
 ```
 
-If piping the installer does not work, clone the repository and run it manually:
+If no release is available yet, clone the repository and run the installer. It builds from source, so Rust and Cargo are required:
 
 ```sh
 git clone https://github.com/me3i/riftlock.git
