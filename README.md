@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/riftlock-banner.jpg" alt="Nighttime city street" width="100%" />
+  <img src="assets/riftlock-banner.png" alt="Riftlock's red-and-steel winged key emblem" width="420" />
 
   <h1>RIFTLOCK</h1>
 
