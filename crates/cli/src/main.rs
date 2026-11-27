@@ -132,9 +132,6 @@ enum Command {
         /// Suppress engine lifecycle progress and the final human-readable terminal summary.
         #[arg(long)]
         quiet: bool,
-        /// Scan a private/internal target (localhost lab) you own.
-        #[arg(long)]
-        allow_private: Option<bool>,
         /// Path to a scope.yaml authorizing this scan.
         #[arg(long, value_name = "PATH")]
         scope_file: Option<String>,
@@ -154,8 +151,7 @@ enum Command {
         #[arg(long)]
         show_secrets: bool,
         /// Path to a riftlock.toml providing scan defaults (target, depth,
-        /// format, allow_private, wordlist). Default: ./riftlock.toml if
-        /// present.
+        /// format, wordlist). Default: ./riftlock.toml if present.
         #[arg(long, value_name = "PATH")]
         config: Option<String>,
         /// Path to a parameter wordlist file for endpoint fuzzing (one name
@@ -184,9 +180,6 @@ enum Command {
     Audit {
         /// Target URL.
         url: String,
-        /// Audit a private/internal target (localhost lab) you own.
-        #[arg(long)]
-        allow_private: bool,
         /// Optional scope.yaml; when it authorizes write probes for the
         /// target, the audit escalates to write depth. Otherwise the audit
         /// stays at read depth (safe for production).
@@ -430,7 +423,6 @@ async fn run(cli: Cli) -> i32 {
             quiet,
             provider,
             depth,
-            allow_private,
             scope_file,
             scope,
             format,
@@ -495,13 +487,6 @@ async fn run(cli: Cli) -> i32 {
                     .as_ref()
                     .and_then(|c| c.format.as_deref().and_then(format_from_str)))
                 .unwrap_or(Format::Human);
-            let allow_private = resumed
-                .as_ref()
-                .map_or(
-                    allow_private.or(cfg.as_ref().and_then(|c| c.allow_private)),
-                    |ck| Some(ck.config.allow_private),
-                )
-                .unwrap_or(false);
             let provider = resumed
                 .as_ref()
                 .map_or(provider, |ck| ck.config.provider.clone());
@@ -539,7 +524,6 @@ async fn run(cli: Cli) -> i32 {
                     cookie,
                     provider: &provider,
                     depth,
-                    allow_private,
                     scope_file,
                     scope: &scope,
                     format,
@@ -555,10 +539,9 @@ async fn run(cli: Cli) -> i32 {
         }
         Command::Audit {
             url,
-            allow_private,
             scope_file,
             godmode,
-        } => audit_cmd(&url, scope_file, allow_private, godmode).await,
+        } => audit_cmd(&url, scope_file, godmode).await,
     }
 }
 
@@ -2139,7 +2122,6 @@ struct ScanOptions<'a> {
     cookie: Option<String>,
     provider: &'a str,
     depth: Depth,
-    allow_private: bool,
     scope_file: Option<String>,
     scope: &'a str,
     format: Format,
@@ -2154,18 +2136,10 @@ struct ScanOptions<'a> {
     resume: Option<Checkpoint>,
 }
 
-/// Build the scope for a scan/audit run. A private/internal target is only
-/// scannable with an explicit `--allow-private` from the operator.
-fn build_scope_guard(
-    origins: &[&str],
-    allow_private: bool,
-) -> Result<ScopeGuard, riftlock_core::ScopeError> {
-    match ScopeGuard::new(origins) {
-        Err(riftlock_core::ScopeError::PrivateIp { .. }) if allow_private => {
-            ScopeGuard::new_lab(origins)
-        }
-        other => other,
-    }
+/// Build the scope for a scan/audit run. The exact scoped host is the only
+/// thing that can be fetched, whether it is public or a LAN address.
+fn build_scope_guard(origins: &[&str]) -> Result<ScopeGuard, riftlock_core::ScopeError> {
+    ScopeGuard::new(origins)
 }
 
 fn print_godmode_banner() {
@@ -2241,13 +2215,10 @@ async fn scan_cmd(url: &str, mut opts: ScanOptions<'_>) -> i32 {
     } else {
         riftlock_core::ScanPolicy::Active
     };
-    let guard = match build_scope_guard(&origins, opts.allow_private) {
+    let guard = match build_scope_guard(&origins) {
         Ok(g) => g.with_policy(policy),
         Err(e) => {
             eprintln!("error: {e}");
-            if matches!(e, riftlock_core::ScopeError::PrivateIp { .. }) {
-                eprintln!("hint: re-run with --allow-private to scan a host you own");
-            }
             return EXIT_ERROR;
         }
     };
@@ -2276,7 +2247,6 @@ async fn scan_cmd(url: &str, mut opts: ScanOptions<'_>) -> i32 {
                     provider: opts.provider.to_owned(),
                     passive_only: passive,
                     depth: opts.depth.label().to_owned(),
-                    allow_private: opts.allow_private,
                     unsafe_bypass: false,
                     scope_file: opts.scope_file.clone(),
                     wordlist: opts.wordlist.map(String::from),
@@ -2649,12 +2619,7 @@ fn exit_code(status: RunStatus) -> i32 {
 
 /// The `audit` super command: all scanners, read depth unless a scope file
 /// authorizes write, SARIF report to ./riftlock-report.sarif.
-async fn audit_cmd(
-    url: &str,
-    scope_file: Option<String>,
-    allow_private: bool,
-    godmode: bool,
-) -> i32 {
+async fn audit_cmd(url: &str, scope_file: Option<String>, godmode: bool) -> i32 {
     if godmode {
         print_godmode_banner();
     }
@@ -2691,15 +2656,12 @@ async fn audit_cmd(
         }
     };
     // Audit implies an active scan: the target itself is the scope.
-    let guard = match build_scope_guard(&[url], allow_private) {
+    let guard = match build_scope_guard(&[url]) {
         Ok(g) => g,
-        Err(_) => match build_scope_guard(&[&format!("https://{url}")], allow_private) {
+        Err(_) => match build_scope_guard(&[&format!("https://{url}")]) {
             Ok(g) => g,
             Err(e) => {
                 eprintln!("error: {e}");
-                if matches!(e, riftlock_core::ScopeError::PrivateIp { .. }) {
-                    eprintln!("hint: re-run with --allow-private to scan a host you own");
-                }
                 return EXIT_ERROR;
             }
         },
@@ -2991,7 +2953,6 @@ mod tests {
             cookie: None,
             provider: "auto",
             depth: Depth::Read,
-            allow_private: false,
             scope_file: None,
             scope: "",
             format: Format::Human,
@@ -3300,7 +3261,6 @@ mod tests {
                 provider: "auto".into(),
                 passive_only: false,
                 depth: "Read".into(),
-                allow_private: true,
                 unsafe_bypass: false,
                 scope_file: None,
                 wordlist: None,
@@ -3317,7 +3277,6 @@ mod tests {
                 cookie: None,
                 provider: "auto",
                 depth: Depth::Read,
-                allow_private: true,
                 scope_file: None,
                 scope: "",
                 format: Format::Human,
@@ -3906,7 +3865,6 @@ mod tests {
                 provider: "generic".into(),
                 passive_only: false,
                 depth: "Read".into(),
-                allow_private: false,
                 unsafe_bypass: false,
                 scope_file: None,
                 wordlist: None,

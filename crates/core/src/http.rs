@@ -384,7 +384,7 @@ impl ScopedClient {
             .unwrap_or(host)
             .parse::<std::net::IpAddr>()
         {
-            if !self.resolver.allows_ip(ip) {
+            if !self.resolver.allows_address(host, ip) {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::PermissionDenied,
                     "target address is prohibited",
@@ -1056,7 +1056,7 @@ fn reject_unsafe_literal(url: &Url, resolver: &SafeResolve) -> Result<(), reqwes
     let Ok(ip) = host.parse::<std::net::IpAddr>() else {
         return Ok(());
     };
-    if resolver.allows_ip(ip) {
+    if resolver.allows_address(host, ip) {
         return Ok(());
     }
 

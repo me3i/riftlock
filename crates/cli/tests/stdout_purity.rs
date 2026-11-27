@@ -10,16 +10,7 @@ async fn run(format: &str, uri: &str) -> std::process::Output {
     let uri = uri.to_owned();
     tokio::task::spawn_blocking(move || {
         Command::new(env!("CARGO_BIN_EXE_riftlock"))
-            .args([
-                "scan",
-                &uri,
-                "--allow-private",
-                "true",
-                "--depth",
-                "normal",
-                "--format",
-                &format,
-            ])
+            .args(["scan", &uri, "--depth", "normal", "--format", &format])
             .env("NO_COLOR", "1")
             // The run writes and removes its checkpoint in the cwd.
             .current_dir(std::env::temp_dir())

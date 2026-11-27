@@ -16,8 +16,6 @@ async fn run(format: &str, uri: &str) -> Output {
                 "generic",
                 "--depth",
                 "read",
-                "--allow-private",
-                "true",
                 "--format",
                 &format,
             ])

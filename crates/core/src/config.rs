@@ -16,8 +16,6 @@ pub struct RiftlockConfig {
     pub depth: Option<u32>,
     /// Default report format (e.g. `html`, `markdown`, `sarif`).
     pub format: Option<String>,
-    /// Whether scanning private/internal addresses is allowed.
-    pub allow_private: Option<bool>,
     /// Path to a wordlist file for discovery.
     pub wordlist: Option<String>,
     /// Discovery wall-clock budget in seconds. Overrides the 60 s default
@@ -65,7 +63,7 @@ mod tests {
         let path = tmp("full");
         std::fs::write(
             &path,
-            "target = \"https://lab.example.com\"\ndepth = 3\nformat = \"sarif\"\nallow_private = true\nwordlist = \"/usr/share/words.txt\"\ndiscovery_budget = 180\n",
+            "target = \"https://lab.example.com\"\ndepth = 3\nformat = \"sarif\"\nwordlist = \"/usr/share/words.txt\"\ndiscovery_budget = 180\n",
         )
         .expect("write tmp");
         let cfg = load(&path).expect("parses");
@@ -75,7 +73,6 @@ mod tests {
                 target: Some("https://lab.example.com".into()),
                 depth: Some(3),
                 format: Some("sarif".into()),
-                allow_private: Some(true),
                 wordlist: Some("/usr/share/words.txt".into()),
                 discovery_budget: Some(180),
             }
@@ -91,7 +88,6 @@ mod tests {
         assert_eq!(cfg.format.as_deref(), Some("html"));
         assert_eq!(cfg.target, None);
         assert_eq!(cfg.depth, None);
-        assert_eq!(cfg.allow_private, None);
         assert_eq!(cfg.wordlist, None);
         assert_eq!(cfg.discovery_budget, None);
         std::fs::remove_file(&path).ok();

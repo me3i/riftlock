@@ -1,7 +1,6 @@
 //! Scope enforcement: every HTTP call goes through the guard.
 
 use reqwest::Method;
-use std::net::IpAddr;
 use url::Url;
 
 /// Scope enforcement failures.
@@ -11,13 +10,6 @@ pub enum ScopeError {
     /// Target host is not in the configured scope list.
     #[error("host {host} is out of scope")]
     OutOfScope {
-        /// The rejected host.
-        host: String,
-    },
-    /// A loopback/private/link-local address was rejected: scanning it is
-    /// either an SSRF vector or a mis-scoped internal target.
-    #[error("private/internal host {host} refused (ssrf guard)")]
-    PrivateIp {
         /// The rejected host.
         host: String,
     },
@@ -54,24 +46,9 @@ pub enum ScanPolicy {
 pub struct ScopeGuard {
     hosts: Vec<String>,
     policy: ScanPolicy,
-    allow_private: bool,
-}
-
-/// Loopback, private, link-local and equivalent IPv6 ranges are refused:
-/// they are SSRF targets, never legitimate scan scope.
-fn is_private_host(host: &str) -> bool {
-    // url serializes IPv6 hosts with brackets; IpAddr::parse does not.
-    let bare = host
-        .strip_prefix('[')
-        .and_then(|h| h.strip_suffix(']'))
-        .unwrap_or(host);
-    match bare.parse::<IpAddr>() {
-        Ok(IpAddr::V4(v4)) => {
-            v4.is_loopback() || v4.is_private() || v4.is_link_local() || v4.is_unspecified()
-        }
-        Ok(IpAddr::V6(v6)) => v6.is_loopback() || v6.is_unique_local() || v6.is_unspecified(),
-        Err(_) => false,
-    }
+    /// Set only for the lab/test constructor. Scan guards authorize private
+    /// resolution per scoped host instead of globally.
+    allow_private_any_host: bool,
 }
 
 impl ScopeGuard {
@@ -79,18 +56,12 @@ impl ScopeGuard {
     /// compared host-to-host. Empty list → passive only.
     ///
     /// # Errors
-    /// If any entry is not a valid URL, or is a private/internal address
-    /// ([`ScopeError::PrivateIp`]).
+    /// If any entry is not a valid URL.
     pub fn new(scope: &[&str]) -> Result<Self, ScopeError> {
         let mut hosts = Vec::with_capacity(scope.len());
         for entry in scope {
             let url = Url::parse(entry)?;
             match url.host_str() {
-                Some(host) if is_private_host(host) => {
-                    return Err(ScopeError::PrivateIp {
-                        host: host.to_owned(),
-                    })
-                }
                 Some(host) => hosts.push(host.to_owned()),
                 None => {
                     return Err(ScopeError::OutOfScope {
@@ -102,43 +73,35 @@ impl ScopeGuard {
         Ok(Self {
             hosts,
             policy: ScanPolicy::Active,
-            allow_private: false,
+            allow_private_any_host: false,
         })
     }
 
-    /// Like [`ScopeGuard::new`], but explicitly authorizes private/internal
-    /// targets: for lab scans of hosts the operator owns (tests, and the
-    /// CLI's `--allow-private`). Requests to hosts *not* listed here are
-    /// still rejected by [`ScopeGuard::check`].
+    /// Build a guard for isolated lab tests. Like [`ScopeGuard::new`], every
+    /// request must still match a listed host; the difference is that DNS
+    /// answers may be private for any host, which the in-process wiremock
+    /// tests need. Production scans use [`ScopeGuard::new`], where private
+    /// resolution is authorized per scoped host.
     ///
     /// # Errors
     /// If any entry is not a valid URL.
     pub fn new_lab(scope: &[&str]) -> Result<Self, ScopeError> {
-        let mut hosts = Vec::with_capacity(scope.len());
-        for entry in scope {
-            let url = Url::parse(entry)?;
-            match url.host_str() {
-                Some(host) => hosts.push(host.to_owned()),
-                None => {
-                    return Err(ScopeError::OutOfScope {
-                        host: (*entry).into(),
-                    })
-                }
-            }
-        }
         Ok(Self {
-            hosts,
-            policy: ScanPolicy::Active,
-            allow_private: true,
+            allow_private_any_host: true,
+            ..Self::new(scope)?
         })
     }
 
-    /// Whether this guard authorizes connections to private, loopback, and
-    /// link-local addresses returned by DNS. Only [`ScopeGuard::new_lab`]
-    /// grants this authorization.
+    /// The hosts this guard authorizes, in scope order.
+    #[must_use]
+    pub fn hosts(&self) -> &[String] {
+        &self.hosts
+    }
+
+    /// Whether DNS may resolve private addresses for any host (lab only).
     #[must_use]
     pub fn allows_private(&self) -> bool {
-        self.allow_private
+        self.allow_private_any_host
     }
 
     /// Restrict this guard to non-mutating requests.
@@ -158,20 +121,21 @@ impl ScopeGuard {
         self.hosts.is_empty()
     }
 
+    /// Whether `host` exactly matches one of this guard's authorized hosts.
+    #[must_use]
+    pub fn contains_host(&self, host: &str) -> bool {
+        self.hosts
+            .iter()
+            .any(|authorized| authorized.eq_ignore_ascii_case(host))
+    }
+
     /// Passive check: is `url`'s host in scope?
     ///
     /// # Errors
-    /// [`ScopeError::PrivateIp`] when the host is an internal address not
-    /// explicitly authorized (see [`ScopeGuard::new_lab`]);
     /// [`ScopeError::OutOfScope`] when the host is not listed.
     pub fn check(&self, url: &Url) -> Result<(), ScopeError> {
         let host = url.host_str().unwrap_or_default();
-        if is_private_host(host) && !self.hosts.iter().any(|h| h == host) {
-            return Err(ScopeError::PrivateIp {
-                host: host.to_owned(),
-            });
-        }
-        if self.hosts.iter().any(|h| h == host) {
+        if self.contains_host(host) {
             Ok(())
         } else {
             Err(ScopeError::OutOfScope {
@@ -214,35 +178,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn rejects_loopback_scope_origin() {
-        assert!(matches!(
-            ScopeGuard::new(&["http://127.0.0.1"]),
-            Err(ScopeError::PrivateIp { .. })
-        ));
-    }
-
-    #[test]
-    fn rejects_private_scope_origin() {
-        assert!(matches!(
-            ScopeGuard::new(&["http://10.0.0.1"]),
-            Err(ScopeError::PrivateIp { .. })
-        ));
-    }
-
-    #[test]
-    fn rejects_link_local_scope_origin() {
-        assert!(matches!(
-            ScopeGuard::new(&["http://169.254.169.254"]),
-            Err(ScopeError::PrivateIp { .. })
-        ));
-    }
-
-    #[test]
-    fn rejects_ipv6_loopback_scope_origin() {
-        assert!(matches!(
-            ScopeGuard::new(&["http://[::1]:3000"]),
-            Err(ScopeError::PrivateIp { .. })
-        ));
+    fn accepts_private_target_origins() {
+        for origin in [
+            "http://127.0.0.1",
+            "http://10.0.0.1",
+            "http://169.254.169.254",
+            "http://[::1]:3000",
+        ] {
+            assert!(ScopeGuard::new(&[origin]).is_ok(), "{origin}");
+        }
     }
 
     #[test]
@@ -258,7 +202,7 @@ mod tests {
         let url = Url::parse("http://169.254.169.254/latest/meta-data").expect("valid url");
         assert!(matches!(
             guard.check(&url),
-            Err(ScopeError::PrivateIp { .. })
+            Err(ScopeError::OutOfScope { .. })
         ));
     }
 

@@ -26,7 +26,6 @@ pub struct CheckpointConfig {
     pub passive_only: bool,
     /// The resolved depth label (`Normal`, `Read`, or `Godmode`).
     pub depth: String,
-    pub allow_private: bool,
     pub unsafe_bypass: bool,
     pub scope_file: Option<String>,
     pub wordlist: Option<String>,
@@ -283,7 +282,6 @@ mod tests {
                 provider: "auto".into(),
                 passive_only: false,
                 depth: "Read".into(),
-                allow_private: true,
                 unsafe_bypass: false,
                 scope_file: None,
                 wordlist: None,

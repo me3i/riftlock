@@ -25,10 +25,11 @@ chmod +x install.sh
 
 ## Usage
 
-Scan a system you own or are authorized to test. Every completed scan automatically saves a timestamped HTML report in the current directory, including `--depth read` scans. Use `--output` to additionally save the selected format to a specific path.
+Scan a system you own or are authorized to test. Every completed scan automatically saves a timestamped HTML report in the current directory, including `--depth read` scans. Use `--output` to additionally save the selected format to a specific path. Public and LAN targets work the same way — just pass the URL; requests are still restricted to the host you named.
 
 ```sh
 riftlock scan https://your-authorized-target.example
+riftlock scan http://192.168.1.10/
 ```
 
 Choose a provider and export a SARIF report:
