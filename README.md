@@ -20,6 +20,8 @@ By default the installer writes to `/usr/local/bin` and may ask for `sudo`. To i
 curl -fsSL https://raw.githubusercontent.com/me3i/riftlock/main/install.sh | env RIFTLOCK_INSTALL_DIR="$HOME/.local/bin" bash
 ```
 
+## Manual Install
+
 To build from a local clone instead:
 
 ```sh
