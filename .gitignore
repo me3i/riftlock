@@ -1,3 +1,6 @@
 /target/
+/dist/
+/graphify-out/
+*.html
 /riftlock-checkpoint-scan-*.json
 /riftlock-report.sarif

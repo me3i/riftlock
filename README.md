@@ -27,8 +27,25 @@
 
 Riftlock is a Rust command-line security assessment tool for web applications and backend-as-a-service (BaaS) deployments. It combines discovery, provider-specific scanners, general web checks, and evidence-oriented reporting in one workspace. Use it only on systems you own or have explicit authorization to test.
 
+## Install on Linux
+
+Tagged releases provide prebuilt static Linux binaries for **x86_64** and **aarch64**. Rust is not required to install or run a release binary. The installer downloads the matching binary, verifies it against the release checksum when available, and installs it to `/usr/local/bin` (using `sudo` only for the final copy).
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/me3i/riftlock/main/install.sh | bash
+```
+
+To install somewhere else, set `RIFTLOCK_INSTALL_DIR` to a writable directory on your `PATH`:
+
+```sh
+RIFTLOCK_INSTALL_DIR="$HOME/.local/bin" bash install.sh
+```
+
+For an offline installation, extract the [Linux bundle](https://github.com/me3i/riftlock/releases/latest) and run `./install.sh` from its directory. The bundle installer uses the included binary for your architecture.
+
 ## Contents
 
+- [Linux installation](#install-on-linux)
 - [Capabilities](#capabilities)
 - [Architecture](#architecture)
 - [Requirements and build](#requirements-and-build)
@@ -110,18 +127,18 @@ riftlock scan https://lab.example \
   --provider auto
 ```
 
-The `riftlock` executable is produced under `target/` by Cargo; it is not installed globally by this repository.
+Cargo builds place the `riftlock` executable under `target/`. To install it globally on Linux, use the prebuilt installer above; for other platforms, use `cargo install --path crates/cli` from the workspace root and ensure Cargo's binary directory is on your `PATH`.
 
 ### From source
 
 ```sh
-git clone <repository-url>
-cd <repository-directory>
+git clone https://github.com/me3i/riftlock.git
+cd riftlock
 cargo build --workspace
 cargo test --workspace
 ```
 
-To install the CLI into Cargo's user binary directory, run `cargo install --path crates/cli` from the workspace root. Ensure that directory is on your `PATH`.
+On non-Linux platforms, install the CLI into Cargo's user binary directory with `cargo install --path crates/cli` from the workspace root, then ensure that directory is on your `PATH`. On Linux, use the prebuilt installer above.
 
 ## Commands and options
 
@@ -327,4 +344,4 @@ Do not run active scans as part of ordinary development verification unless the 
 
 ## License
 
-The workspace declares `MIT OR Apache-2.0`. See the repository's license files or package metadata for the applicable license text.
+The repository includes the MIT License text in [LICENSE](LICENSE). The Rust package metadata declares `MIT OR Apache-2.0`; refer to the relevant package metadata for that licensing declaration.
