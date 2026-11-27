@@ -48,6 +48,22 @@ async fn json_stdout_is_one_parseable_document() {
         stderr.contains("[status]"),
         "diagnostics missing from stderr: {stderr}"
     );
+    let report_path = stderr
+        .lines()
+        .find_map(|line| {
+            line.rsplit_once("HTML report generated at: ")
+                .map(|(_, p)| p)
+        })
+        .expect("read-depth scan should announce its automatic HTML report path");
+    assert!(
+        report_path.ends_with(".html"),
+        "unexpected report path: {report_path}"
+    );
+    assert!(
+        std::path::Path::new(report_path).is_file(),
+        "report was not written: {report_path}"
+    );
+    std::fs::remove_file(report_path).expect("remove generated report");
 }
 
 #[tokio::test(flavor = "multi_thread")]

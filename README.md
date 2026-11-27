@@ -25,7 +25,7 @@ chmod +x install.sh
 
 ## Usage
 
-Scan a system you own or are authorized to test:
+Scan a system you own or are authorized to test. Every completed scan automatically saves a timestamped HTML report in the current directory, including `--depth read` scans. Use `--output` to additionally save the selected format to a specific path.
 
 ```sh
 riftlock scan https://your-authorized-target.example

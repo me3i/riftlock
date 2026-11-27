@@ -129,7 +129,7 @@ enum Command {
         /// `godmode` tier is selected with `--godmode`.
         #[arg(long, value_enum)]
         depth: Option<DepthArg>,
-        /// Suppress engine lifecycle progress and the entire final report.
+        /// Suppress engine lifecycle progress and the final human-readable terminal summary.
         #[arg(long)]
         quiet: bool,
         /// Scan a private/internal target (localhost lab) you own.
@@ -145,7 +145,7 @@ enum Command {
         /// human).
         #[arg(long, value_enum)]
         format: Option<Format>,
-        /// Write the formatted report to this path instead of stdout.
+        /// Write the selected-format report to this path; a timestamped HTML report is also saved automatically.
         #[arg(long, value_name = "PATH")]
         output: Option<String>,
         /// Reveal full credential values in interactive terminal output only.
@@ -2022,17 +2022,16 @@ fn saved_path_display(path: &str) -> String {
 }
 
 fn report_filename(host: &str, mode: &str, started_at: SystemTime) -> String {
-    let seconds = started_at
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
+    let timestamp = started_at.duration_since(UNIX_EPOCH).unwrap_or_default();
+    let seconds = timestamp.as_secs();
+    let fraction = timestamp.subsec_nanos();
     let days = (seconds / 86_400) as i64;
     let day_seconds = seconds % 86_400;
     let (year, month, day) = civil_from_days(days);
     let hour = day_seconds / 3_600;
     let minute = day_seconds % 3_600 / 60;
     let second = day_seconds % 60;
-    format!("{host}-{mode}-report-{year:04}{month:02}{day:02}-{hour:02}{minute:02}{second:02}.html")
+    format!("{host}-{mode}-report-{year:04}{month:02}{day:02}-{hour:02}{minute:02}{second:02}-{fraction:09}.html")
 }
 
 /// Convert days since the Unix epoch to a proleptic Gregorian date.
@@ -2161,7 +2160,9 @@ async fn scan_cmd(url: &str, mut opts: ScanOptions<'_>) -> i32 {
     ui::brand::print_logo();
     ui::brand::print_auth_banner();
     let scan_started_at = SystemTime::now();
-    let save_html = opts.godmode || matches!(opts.format, Format::Html);
+    // Every completed scan writes a self-contained HTML report, regardless
+    // of depth or the selected stdout format.
+    let save_html = true;
     if opts.godmode {
         print_godmode_banner();
         opts.depth = Depth::Godmode;
@@ -2183,27 +2184,22 @@ async fn scan_cmd(url: &str, mut opts: ScanOptions<'_>) -> i32 {
     // command stays visible in scrollback.
     ui::brand::boot(url, opts.depth.label());
     if opts.format == Format::Html && opts.output.is_none() {
-        let mode = if opts.depth == Depth::Godmode {
-            "godmode"
-        } else {
-            "read"
-        };
+        let mode = opts.depth.label().to_ascii_lowercase();
         opts.output = Some(report_filename(
             parsed.host_str().unwrap_or("target"),
-            mode,
+            &mode,
             scan_started_at,
         ));
     }
     let html_path = if opts.format == Format::Html {
         opts.output.clone()
-    } else if opts.godmode {
+    } else {
+        let mode = opts.depth.label().to_ascii_lowercase();
         Some(report_filename(
             parsed.host_str().unwrap_or("target"),
-            "godmode",
+            &mode,
             scan_started_at,
         ))
-    } else {
-        None
     };
     let lab_guard = match resolve_lab_guard(url, &parsed, opts.depth, opts.scope_file.as_deref()) {
         Ok(g) => g,
@@ -2599,7 +2595,7 @@ async fn scan_cmd(url: &str, mut opts: ScanOptions<'_>) -> i32 {
                 eprintln!("error: cannot write {path}: {e}");
                 return EXIT_ERROR;
             }
-            let saved = format!("[+] html report saved to {}", saved_path_display(path));
+            let saved = format!("[+] HTML report generated at: {}", saved_path_display(path));
             if human {
                 println!("{}", ui::theme::scanning(&saved));
             } else {
@@ -2751,11 +2747,11 @@ mod tests {
         let timestamp = UNIX_EPOCH + Duration::from_secs(1_795_714_323);
         assert_eq!(
             report_filename("pentest-ground.com", "read", timestamp),
-            "pentest-ground.com-read-report-20261126-173203.html"
+            "pentest-ground.com-read-report-20261126-173203-000000000.html"
         );
         assert_eq!(
             report_filename("duck-store.escape.tech", "godmode", timestamp),
-            "duck-store.escape.tech-godmode-report-20261126-173203.html"
+            "duck-store.escape.tech-godmode-report-20261126-173203-000000000.html"
         );
     }
 
