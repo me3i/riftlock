@@ -53,7 +53,6 @@ Unlocks every probe class — injection, authentication bypass, and broad parame
 
 ```sh
 riftlock scan https://your-authorized-target.example --godmode
-riftlock audit https://your-authorized-target.example --godmode
 ```
 
 > [!WARNING]
