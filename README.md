@@ -27,6 +27,7 @@ To build from a local clone instead:
 ```sh
 git clone https://github.com/me3i/riftlock.git
 cd riftlock
+chmod +x install.sh
 ./install.sh
 ```
 
