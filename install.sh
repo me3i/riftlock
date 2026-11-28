@@ -14,7 +14,7 @@ have_cc() { command -v cc >/dev/null 2>&1 || command -v gcc >/dev/null 2>&1 || c
 # Download helpers shared by the release, source, and rustup fetches.
 download() { # download <url> <output>
   if command -v curl >/dev/null 2>&1; then
-    curl -fL --proto '=https' --tlsv1.2 --retry 5 --retry-all-errors --connect-timeout 15 "$1" -o "$2"
+    curl -fL --proto '=https' --tlsv1.2 --retry 5 --connect-timeout 15 "$1" -o "$2"
   elif command -v wget >/dev/null 2>&1; then
     wget -q "$1" -O "$2"
   else
@@ -131,7 +131,7 @@ else
   BASE_URL="https://github.com/${REPO}/releases/latest/download"
   DOWNLOAD_FAILED=0
   if command -v curl >/dev/null 2>&1; then
-    curl -fL --retry 5 --retry-all-errors --connect-timeout 15 --progress-bar "$BASE_URL/$ASSET" -o "$BINARY" || DOWNLOAD_FAILED=1
+    curl -fL --retry 5 --connect-timeout 15 --progress-bar "$BASE_URL/$ASSET" -o "$BINARY" || DOWNLOAD_FAILED=1
   elif command -v wget >/dev/null 2>&1; then
     wget -q "$BASE_URL/$ASSET" -O "$BINARY" || DOWNLOAD_FAILED=1
   else
