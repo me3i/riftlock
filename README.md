@@ -59,6 +59,40 @@ riftlock scan https://your-authorized-target.example --godmode
 > [!WARNING]
 > Godmode is destructive by design. Run it only against systems you own or have written permission to test.
 
+## Test coverage by depth
+
+### `--depth normal` — passive
+
+- Technology fingerprinting from the page and its JavaScript bundles
+- TLS, security-header, CORS and cookie-flag checks
+- Exposed infrastructure files, orchestrator APIs and bucket-style hosts
+
+No crawl, no parameter wordlist and no payloads are used.
+
+### `--depth read` — safe active checks (default)
+
+Everything in normal, plus a crawl and these checks:
+
+- **SQL injection** — error- and boolean-based; time-based only on ID-shaped parameters that do not reflect the probe
+- **Injection and traversal** — reflected XSS, SSTI, path traversal/LFI, SSRF, open redirect, command injection (proven by real command output)
+- **CSRF** — token presence on discovered forms
+- **Source and secret disclosure** — `.git`, `.env`, backups, source maps, dependency manifests and known-vulnerable pins
+- **Authorization bypass** — path normalization, JWT `alg:none`, OAuth open redirect/missing `state`, signed-URL tampering, cache deception, SSE and WebSocket auth desync
+- **Unauthenticated reads** — Supabase, Firebase, Appwrite and OpenAPI endpoints
+- **Client-side analysis** — DOM XSS sinks, `postMessage` handlers, secrets in web storage, SPA taint analysis
+- **HTTP request smuggling** — raw framing probes
+
+### `--godmode` — authorized write probes
+
+Everything in read, plus:
+
+- **Form and JSON-body injection** — SQLi (time-based on every parameter), NoSQL, XSS, SSTI, LFI, command injection
+- **Parameter mining** — hidden `debug`/`admin` switches and the larger endpoint wordlist
+- **Authentication** — login bypass on auth endpoints; login/auth matrix when credentials are supplied
+- **BOLA/IDOR** — mutation of another user's resource IDs
+- **Framework and protocol probes** — Next.js Server Actions, GraphQL batching, gRPC reflection, LLM prompt injection, prototype pollution, race conditions
+- **Supabase writes** — auth, storage, RPC and table write checks
+
 ## Quick start
 
 Only scan systems you own or have explicit permission to assess. Start with passive discovery, then use the default `read` depth for safe active checks:
@@ -73,6 +107,10 @@ riftlock scan https://your-authorized-target.example
 - `riftlock scan [URL]` — run selected scanners (default `--provider auto`), with configurable depth and output. URL can be omitted when `target` is set in `riftlock.toml`.
 - `riftlock audit URL` — run all applicable scanners and write `./riftlock-report.sarif`; read depth is the default.
 - `riftlock fingerprint URL` — passively inspect the page and its bundles for Supabase key material.
+
+`--provider <name>` runs a single scanner; the default `auto` runs every applicable scanner. Names: `appwrite`, `auth`, `cache`, `clerk`, `clientside`, `firebase`, `generic`, `graphql`, `grpc`, `infra`, `llm`, `misconfig`, `nextjs`, `oauth`, `openapi`, `path`, `prototype`, `race`, `signedurl`, `smuggling`, `source`, `spa`, `sse`, `ssrf`, `supabase`, `supplychain`, `websocket`.
+
+`--bearer TOKEN` and `--cookie VALUE` send session credentials on scoped requests; both are sensitive. `--quiet` hides lifecycle progress and the final human summary, but never findings or reports.
 
 Run `riftlock --help`, `riftlock scan --help`, `riftlock audit --help`, or `riftlock fingerprint --help` for command options.
 
@@ -100,6 +138,8 @@ discovery_budget = 300    # seconds
 ```
 
 Use `--config PATH` to load another config file. `--wordlist PATH` supplies endpoint parameter names, one per line (`#` begins a comment); otherwise the built-in list is used. `--discovery-budget SECONDS` changes only the discovery wall-clock budget, not request timeouts, scope, or rate limits. Interrupted scans print a scan ID and save a checkpoint; resume with `riftlock scan --resume SCAN_ID`. Checkpoints may contain target, scope, and scan state, so handle them as sensitive data.
+
+Session-based checks (login matrix, BOLA/IDOR, race, cache deception) read tokens from `RIFTLOCK_SESSION_GUEST`, `RIFTLOCK_SESSION_USER_A`, `RIFTLOCK_SESSION_USER_B` and `RIFTLOCK_SESSION_ADMIN`; the login matrix also uses `RIFTLOCK_USER_A_EMAIL` and `RIFTLOCK_USER_A_PASS`. Without credentials those checks skip cleanly.
 
 ## Reports and exit status
 
